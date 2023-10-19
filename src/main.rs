@@ -88,7 +88,7 @@ impl Session {
         1 // XXX?
     }
 }
-//noinspection RsUnresolvedReference
+
 // Although we use `async-std` here, you can use any async runtime of choice.
 #[tokio::main]
 async fn main() -> zbus::Result<()> {
