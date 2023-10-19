@@ -1,5 +1,37 @@
-use zbus::{Connection, dbus_interface, Result};
+use std::collections::HashMap;
+use zbus::{Connection, dbus_interface, zvariant};
+use serde::Serialize;
 
+const PORTAL_RESPONSE_SUCCESS: u32 = 0;
+const PORTAL_RESPONSE_CANCELLED: u32 = 1;
+const PORTAL_RESPONSE_OTHER: u32 = 2;
+#[derive(zvariant::Type)]
+#[zvariant(signature = "(ua{sv})")]
+enum PortalResponse<T: zvariant::Type + serde::Serialize> {
+    Success(T),
+    Cancelled,
+    Other,
+}
+
+impl<T: zvariant::Type + serde::Serialize> serde::Serialize for PortalResponse<T> {
+    //noinspection RsMainFunctionNotFound
+    //noinspection RsMainFunctionNotFound
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Success(res) => (PORTAL_RESPONSE_SUCCESS, res).serialize(serializer),
+            Self::Cancelled => (
+                PORTAL_RESPONSE_CANCELLED,
+                HashMap::<String, zvariant::Value>::new(),
+            )
+                .serialize(serializer),
+            Self::Other => (
+                PORTAL_RESPONSE_OTHER,
+                HashMap::<String, zvariant::Value>::new(),
+            )
+                .serialize(serializer),
+        }
+    }
+}
 
 struct Greeter {
     count: i32
@@ -33,15 +65,15 @@ impl Session {
     }
 }
 
-#[zbus::dbus_interface(name = "org.freedesktop.impl.portal.Session")]
+#[dbus_interface(name = "org.freedesktop.impl.portal.Session")]
 impl Session {
-    async fn close(&mut self, #[zbus(signal_context)] signal_ctxt: zbus::SignalContext<'_>) {
+    async fn close(&mut self, #[zbus(signal_context)] signal_context: zbus::SignalContext<'_>) {
         // XXX error?
-        let _ = self.closed(&signal_ctxt).await;
-        let _ = signal_ctxt
+        let _ = self.closed(&signal_context).await;
+        let _ = signal_context
             .connection()
             .object_server()
-            .remove::<Self, _>(signal_ctxt.path())
+            .remove::<Self, _>(signal_context.path())
             .await;
         if let Some(cb) = self.close_cb.take() {
             cb();
@@ -49,16 +81,17 @@ impl Session {
     }
 
     #[dbus_interface(signal)]
-    async fn closed(&self, signal_ctxt: &zbus::SignalContext<'_>) -> zbus::Result<()>;
+    async fn closed(&self, signal_context: &zbus::SignalContext<'_>) -> zbus::Result<()>;
 
     #[dbus_interface(property, name = "version")]
     fn version(&self) -> u32 {
         1 // XXX?
     }
 }
+//noinspection RsUnresolvedReference
 // Although we use `async-std` here, you can use any async runtime of choice.
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> zbus::Result<()> {
     let connection = Connection::session().await?;
     let greeter = Greeter { count: 0 };
     // setup the server
